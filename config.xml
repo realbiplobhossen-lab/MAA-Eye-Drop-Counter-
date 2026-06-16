@@ -1,0 +1,22 @@
+<?xml version='1.0' encoding='utf-8'?>
+<widget id="com.realbip.eyedroptracker" version="1.0.0" xmlns="http://www.w3.org/ns/widgets">
+    <name>MAA Eye Drop Counter</name>
+    <description>রাশেদা বেগমের চোখের ড্রপ ট্র্যাকিং এবং নেটিভ লাউড রিমাইন্ডার অ্যাপ্লিকেশন।</description>
+    <author email="realbip@example.com" href="https://github.com/realbip">Beauty Akter</author>
+    
+    <content src="index.html" />
+    <access origin="*" />
+    <allow-navigation href="*" />
+    <allow-intent href="http://*/*" />
+    <allow-intent href="https://*/*" />
+    
+    <preference name="Orientation" value="portrait" />
+    <preference name="KeepRunning" value="true" />
+
+    <!-- কাস্টম মায়ের পিকচার আইকন এন্ট্রি লজিক -->
+    <icon src="mom_icon.png" />
+
+    <plugin name="cordova-plugin-vibration" spec="^3.1.1" />
+    <plugin name="cordova-plugin-local-notification" spec="^0.9.0-beta.2" />
+    <plugin name="cordova-plugin-background-mode" spec="^0.7.3" />
+</widget>

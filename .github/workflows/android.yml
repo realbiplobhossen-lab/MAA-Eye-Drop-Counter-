@@ -31,17 +31,25 @@ jobs:
         run: |
           cordova create android-app com.realbip.eyedroptracker "MAA_EyeDrop"
           cd android-app
-          cordova platform add android
+          cordova platform add android --nosave
           
-          cordova plugin add cordova-plugin-vibration
-          cordova plugin add cordova-plugin-local-notification
-          cordova plugin add cordova-plugin-background-mode
+          # নেটিভ প্লাগইনসমূহ সংযোজন
+          cordova plugin add cordova-plugin-vibration --nosave
+          cordova plugin add cordova-plugin-local-notification --nosave
+          cordova plugin add cordova-plugin-background-mode --nosave
           
+          # ফাইল স্ট্রাকচার ক্লিন ও কপি
           rm -rf www/*
           cp -r ../index.html www/
           cp -r ../config.xml ./
           
-          [ -f ../mom_icon.png ] && cp ../mom_icon.png www/ || echo "No custom icon found"
+          # আইকন চেকিং লজিক (ছবি না থাকলে বিল্ড ক্র্যাশ করবে না)
+          if [ -f ../mom_icon.png ]; then
+            cp ../mom_icon.png www/
+            echo "Custom icon applied successfully."
+          else
+            echo "Warning: mom_icon.png not found, using default cordova icon."
+          fi
 
       - name: Build Android APK
         run: |

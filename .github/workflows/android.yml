@@ -1,0 +1,56 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Install Cordova
+        run: npm install -g cordova
+
+      - name: Create Cordova Project
+        run: |
+          cordova create android-app com.realbip.eyedroptracker "MAA_EyeDrop"
+          cd android-app
+          cordova platform add android
+          
+          cordova plugin add cordova-plugin-vibration
+          cordova plugin add cordova-plugin-local-notification
+          cordova plugin add cordova-plugin-background-mode
+          
+          rm -rf www/*
+          cp -r ../index.html www/
+          cp -r ../config.xml ./
+          
+          [ -f ../mom_icon.png ] && cp ../mom_icon.png www/ || echo "No custom icon found"
+
+      - name: Build Android APK
+        run: |
+          cd android-app
+          cordova build android --debug
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MAA-Eye-Drop-Counter-APK
+          path: android-app/platforms/android/app/build/outputs/apk/debug/app-debug.apk
+          

@@ -24,6 +24,12 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
+      # গ্র্যাডল সংস্করণ নির্দিষ্ট করা (XmlParser এরর ফিক্স করার জন্য)
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
       - name: Install Cordova Globally
         run: |
           npm cache clean --force
@@ -31,44 +37,37 @@ jobs:
 
       - name: Create and Configure Cordova Project
         run: |
-          # পুরোনো ফোল্ডার সম্পূর্ণ পরিষ্কার করা
           rm -rf android-app
-          
-          # নতুন কর্ডোভা প্রোজেক্ট ইনিশিয়েট করা
           cordova create android-app com.realbip.eyedroptracker "MAA_EyeDrop"
           cd android-app
           
-          # ফ্রেশ নোড এনভায়রনমেন্ট
           npm install
-          
-          # মেইন সোর্স ফাইল কপি করা
           rm -rf www/*
           cp -r ../index.html www/
           
-          # আইকন ট্যাগের জটিলতা সম্পূর্ণ দূর করার লজিক
+          # আইকন ম্যানেজমেন্ট
           if [ -f ../mom_icon.png ]; then
             cp ../mom_icon.png www/
             cp ../config.xml ./
-            echo "Custom icon found and applied successfully."
+            echo "Custom icon applied."
           else
-            echo "Warning: mom_icon.png not found. Cleaning config.xml to avoid Cordova strict build crash."
-            # config.xml থেকে আইকন রিলেটেড ট্যাগটি সম্পূর্ণ মুছে দিয়ে নতুন ফাইল তৈরি
+            echo "Warning: mom_icon.png not found. Cleaning config.xml."
             sed '/<icon/d' ../config.xml > ./config.xml
           fi
 
-          # প্লাগইনসমূহ সংযোজন
+          # প্লাগইন ও প্ল্যাটফর্ম
           cordova plugin add cordova-plugin-vibration --save
           cordova plugin add cordova-plugin-local-notification --save
           cordova plugin add cordova-plugin-background-mode --save
           
-          # এবার কোনো আইকন এরর ছাড়াই সফলভাবে প্ল্যাটফর্ম যুক্ত হবে
           cordova platform add android@12.0.0 --save
 
       - name: Build Android APK
         run: |
           cd android-app
-          cordova build android --debug
-
+          # নির্দিষ্ট করা গ্র্যাডল সংস্করণ ব্যবহার করে বিল্ড জোরদার করা
+          CORDOVA_ANDROID_GRADLE_DISTRIBUTION_URL="https://services.gradle.org/distributions/gradle-8.7-bin.zip" cordova build android --debug
+          
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:

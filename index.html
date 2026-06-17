@@ -361,6 +361,9 @@
             stopSystemAlarm();
         }
 
+                // অ্যালার্ম ট্র্যাক করার জন্য একটি নতুন ভ্যারিয়েবল
+        let isAlarmActive = false;
+
         // টাইম চেকার লুপ এবং স্লিপ ফিল্টার
         setInterval(() => {
             const now = Math.floor(Date.now() / 1000);
@@ -377,7 +380,8 @@
 
                 if (timeLeft <= 0) {
                     element.innerHTML = "00:00:00";
-                    if (!isSleepingTime) {
+                    // যদি আগে থেকে অ্যালার্ম না বেজে থাকে এবং ঘুমানোর সময় না হয়, তবেই বাজবে
+                    if (!isSleepingTime && !isAlarmActive) {
                         playLoudAlarmSystem(localTimers[key].name);
                     }
                 } else {
@@ -395,6 +399,7 @@
         function playLoudAlarmSystem(medName) {
             if (activeAlarmMed === medName) return;
             activeAlarmMed = medName;
+            isAlarmActive = true; // অ্যালার্ম স্টেট অ্যাক্টিভ করা হলো
 
             // ১. নেটিভ অ্যান্ড্রয়েড নোটিফিকেশন ট্রিগার
             if (window.cordova && cordova.plugins && cordova.plugins.notification) {
@@ -415,10 +420,10 @@
                 nativeOscillator = nativeAudioContext.createOscillator();
                 nativeGainNode = nativeAudioContext.createGain();
                 
-                nativeOscillator.type = 'sawtooth'; // লাউড অ্যালার্ম টোন
-                nativeOscillator.frequency.setValueAtTime(880, nativeAudioContext.currentTime); // উচ্চ পিচ সাইরেন
+                nativeOscillator.type = 'sawtooth'; 
+                nativeOscillator.frequency.setValueAtTime(880, nativeAudioContext.currentTime); 
                 
-                nativeGainNode.gain.setValueAtTime(1.0, nativeAudioContext.currentTime); // সর্বোচ্চ ভলিউম ফিক্স
+                nativeGainNode.gain.setValueAtTime(1.0, nativeAudioContext.currentTime); 
                 
                 nativeOscillator.connect(nativeGainNode);
                 nativeGainNode.connect(nativeAudioContext.destination);
@@ -429,7 +434,7 @@
                 backupAudio.play().catch(()=>{});
             }
 
-      // ৩. কন্ট্রোলড ভাইব্রেশন লুপ (১ সেকেন্ড ভাইব্রেট, ১ সেকেন্ড অফ) যাতে হ্যাং না হয়
+            // ৩. কন্ট্রোলড ভাইব্রেশন লুপ
             if (navigator.vibrate) {
                 navigator.vibrate([1000, 1000]);
                 vibrationIntervalId = setInterval(() => {
@@ -441,8 +446,48 @@
             document.getElementById('alarmOverlay').classList.add('active');
         }
 
-        // অ্যালার্ম এবং ভাইব্রেশন ক্লিয়ার লজিক
+        // অ্যালার্ম এবং ভাইব্রেশন ক্লিয়ার লজিক (সংশোধিত)
         function stopSystemAlarm() {
+            // ১. অডিও স্টপ
+            if (nativeOscillator) {
+                try {
+                    nativeOscillator.stop();
+                    nativeOscillator.disconnect();
+                } catch(e){}
+                nativeOscillator = null;
+            }
+            const backupAudio = document.getElementById('backupAudio');
+            backupAudio.pause(); 
+            backupAudio.currentTime = 0;
+
+            // ২. ভাইব্রেশন কিল
+            if(vibrationIntervalId) {
+                clearInterval(vibrationIntervalId);
+                vibrationIntervalId = null;
+            }
+            if (navigator.vibrate) {
+                navigator.vibrate(0);
+            }
+
+            // ৩. টাইমার ইন্টারভ্যাল রিসেট বা মিউট করা যাতে পরের সেকেন্ডে আবার লুপ চালু না হয়
+            for (let key in localTimers) {
+                if (localTimers[key].name === activeAlarmMed) {
+                    // টার্গেট টাইম নাল (null) করে দেওয়া হলো যাতে "দেওয়া হয়েছে" বাটনে চাপার আগে আর অ্যালার্ম না ট্রিগার করে
+                    localTimers[key].targetTime = null; 
+                    
+                    // ফায়ারবেস লাইভ স্টেট ক্লিয়ার করা যাতে পরবর্তী অ্যাপ ওপেনে আর ঝামেলা না করে
+                    db.collection("droptracker").doc("liveState").set({
+                        [key + '_target']: null
+                    }, { merge: true });
+                }
+            }
+
+            document.getElementById('alarmOverlay').classList.remove('active');
+            activeAlarmMed = "";
+            isAlarmActive = false; // অ্যালার্ম স্টেট বন্ধ করা হলো
+        }
+        
+        
             // ১. অডিও স্টপ
             if (nativeOscillator) {
                 try {

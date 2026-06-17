@@ -30,7 +30,7 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      # নিখোঁজ Android Build Tools 33.0.2 স্বয়ংক্রিয়ভাবে ইনস্টল করার কমান্ড
+      # প্রয়োজনীয় অ্যান্ড্রয়েড টুলস নিশ্চিত করা
       - name: Install Android Build Tools 33.0.2
         run: |
           echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
@@ -51,7 +51,7 @@ jobs:
           rm -rf www/*
           cp -r ../index.html www/
           
-          # কাস্টম আইকন চেকিং
+          # আইকন ম্যানেজমেন্ট
           if [ -f ../mom_icon.png ]; then
             cp ../mom_icon.png www/
             cp ../config.xml ./
@@ -66,7 +66,17 @@ jobs:
           cordova plugin add cordova-plugin-local-notification --save
           cordova plugin add cordova-plugin-background-mode --save
           
+          # প্ল্যাটফর্ম সংযোজন
           cordova platform add android@12.0.0 --save
+
+          # প্লাগইনের ভেতরের বাতিল হওয়া 'compile' এরর ফিক্স করার অটো-প্যাচ লজিক
+          echo "Patching legacy compile methods in plugins..."
+          find platforms/android/ -name "*.gradle" -type f -exec sed -i 's/\bcompile\b/implementation/g' {} +
+          
+          # নির্দিষ্ট করে compileSdkVersion যুক্ত করার লজিক (লাইন ৬৩ এর এরর ফিক্স)
+          if [ -f platforms/android/app/build.gradle ]; then
+            sed -i 's/compileSdkVersion.*/compileSdkVersion 33/g' platforms/android/app/build.gradle
+          fi
 
       - name: Build Android APK
         run: |

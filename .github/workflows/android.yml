@@ -61,25 +61,30 @@ jobs:
             sed '/<icon/d' ../config.xml > ./config.xml
           fi
 
-          # প্লাগইন সংযোজন
+          # কোর প্লাগইনসমূহ সংযোজন
           cordova plugin add cordova-plugin-vibration --save
           cordova plugin add cordova-plugin-local-notification --save
           cordova plugin add cordova-plugin-background-mode --save
           
+          # AndroidX মাইগ্রেশন এবং সাপোর্ট প্লাগইনসমূহ (জাভা কম্পাইল এরর ফিক্স করার জন্য)
+          cordova plugin add cordova-plugin-androidx --save
+          cordova plugin add cordova-plugin-androidx-adapter --save
+          
           # প্ল্যাটফর্ম সংযোজন
           cordova platform add android@12.0.0 --save
 
-          # সুনির্দিষ্ট প্যাচ লজিক: জাভার Pattern.compile অক্ষত রেখে শুধুমাত্র গ্র্যাডলের ডিপেন্ডেন্সি 'compile ' কে 'implementation ' করা হলো
+          # পুরোনো প্লাগইনের ডিপেন্ডেন্সি প্যাচ
           echo "Targeted patching of legacy compile dependencies..."
           find platforms/android/ -name "*.gradle" -type f -exec sed -i 's/\bcompile\s\+/implementation /g' {} +
 
       - name: Build Android APK
         run: |
           cd android-app
-          # এনভায়রনমেন্ট ভ্যারিয়েবলের মাধ্যমে SDK এরর এবং গ্র্যাডল অমিল একসাথে ফিক্স
+          # এনভায়রনমেন্ট ভ্যারিয়েবলের মাধ্যমে AndroidX সক্রিয় করা এবং SDK কনফিগার করা
           export CORDOVA_ANDROID_GRADLE_DISTRIBUTION_URL="https://services.gradle.org/distributions/gradle-8.7-bin.zip"
           export CDV_COMPILE_SDK_VERSION=33
           export CDV_BUILD_TOOLS_VERSION="33.0.2"
+          export CDV_ANDROIDX_ENABLED=true
           
           cordova build android --debug
           

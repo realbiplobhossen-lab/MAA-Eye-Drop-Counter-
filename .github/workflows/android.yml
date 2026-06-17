@@ -24,41 +24,43 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
-      - name: Install Cordova and Clean Cache
+      - name: Install Cordova Globally
         run: |
           npm cache clean --force
           npm install -g cordova@12.0.0
 
-      - name: Create Cordova Project
+      - name: Create and Configure Cordova Project
         run: |
-          # পুরোনো অবশিষ্টাংশ থাকলে তা পরিষ্কার করা
+          # পুরোনো ফোল্ডার থাকলে তা সম্পূর্ণ মুছে ফেলা
           rm -rf android-app
           
-          # নতুন কর্ডোভা অ্যাপ তৈরি
+          # নতুন কর্ডোভা প্রোজেক্ট তৈরি
           cordova create android-app com.realbip.eyedroptracker "MAA_EyeDrop"
           cd android-app
           
-          # নোড মডিউল পুনরায় ফ্রেশ ইনস্টল করা যাতে builders এরর না আসে
+          # প্রোজেক্ট ডিরেক্টরিতে ফ্রেশ নোড এনভায়রনমেন্ট নিশ্চিত করা
           npm install
           
-          # প্ল্যাটফর্ম এবং প্লাগইনসমূহ সঠিক উপায়ে সংযোজন
-          cordova platform add android@12.0.0 --nosave
-          cordova plugin add cordova-plugin-vibration --nosave
-          cordova plugin add cordova-plugin-local-notification --nosave
-          cordova plugin add cordova-plugin-background-mode --nosave
-          
-          # আপনার কাস্টম ফাইলসমূহ কপি করা
+          # আপনার কাস্টম ফাইলসমূহ প্ল্যাটফর্ম যুক্ত করার আগেই কপি করা
           rm -rf www/*
           cp -r ../index.html www/
           cp -r ../config.xml ./
           
-          # আইকন চেকিং (ছবি না থাকলে ডিফল্ট আইকন নিয়ে বিল্ড হবে, ক্র্যাশ করবে না)
+          # আইকন চেকিং লজিক
           if [ -f ../mom_icon.png ]; then
             cp ../mom_icon.png www/
-            echo "Custom icon applied successfully."
+            echo "Custom icon prepared."
           else
-            echo "Warning: mom_icon.png not found, using default icon."
+            echo "Warning: mom_icon.png not found."
           fi
+
+          # সিকোয়েন্স ফিক্স: প্রথমে প্লাগইন যুক্ত করা, তারপর প্ল্যাটফর্ম অ্যাড করা
+          cordova plugin add cordova-plugin-vibration --save
+          cordova plugin add cordova-plugin-local-notification --save
+          cordova plugin add cordova-plugin-background-mode --save
+          
+          # এবার সফলভাবে অ্যান্ড্রয়েড প্ল্যাটফর্ম যুক্ত হবে
+          cordova platform add android@12.0.0 --save
 
       - name: Build Android APK
         run: |

@@ -31,35 +31,37 @@ jobs:
 
       - name: Create and Configure Cordova Project
         run: |
-          # পুরোনো ফোল্ডার থাকলে তা সম্পূর্ণ মুছে ফেলা
+          # পুরোনো ফোল্ডার সম্পূর্ণ পরিষ্কার করা
           rm -rf android-app
           
-          # নতুন কর্ডোভা প্রোজেক্ট তৈরি
+          # নতুন কর্ডোভা প্রোজেক্ট ইনিশিয়েট করা
           cordova create android-app com.realbip.eyedroptracker "MAA_EyeDrop"
           cd android-app
           
-          # প্রোজেক্ট ডিরেক্টরিতে ফ্রেশ নোড এনভায়রনমেন্ট নিশ্চিত করা
+          # ফ্রেশ নোড এনভায়রনমেন্ট
           npm install
           
-          # আপনার কাস্টম ফাইলসমূহ প্ল্যাটফর্ম যুক্ত করার আগেই কপি করা
+          # মেইন সোর্স ফাইল কপি করা
           rm -rf www/*
           cp -r ../index.html www/
-          cp -r ../config.xml ./
           
-          # আইকন চেকিং লজিক
+          # আইকন ট্যাগের জটিলতা সম্পূর্ণ দূর করার লজিক
           if [ -f ../mom_icon.png ]; then
             cp ../mom_icon.png www/
-            echo "Custom icon prepared."
+            cp ../config.xml ./
+            echo "Custom icon found and applied successfully."
           else
-            echo "Warning: mom_icon.png not found."
+            echo "Warning: mom_icon.png not found. Cleaning config.xml to avoid Cordova strict build crash."
+            # config.xml থেকে আইকন রিলেটেড ট্যাগটি সম্পূর্ণ মুছে দিয়ে নতুন ফাইল তৈরি
+            sed '/<icon/d' ../config.xml > ./config.xml
           fi
 
-          # সিকোয়েন্স ফিক্স: প্রথমে প্লাগইন যুক্ত করা, তারপর প্ল্যাটফর্ম অ্যাড করা
+          # প্লাগইনসমূহ সংযোজন
           cordova plugin add cordova-plugin-vibration --save
           cordova plugin add cordova-plugin-local-notification --save
           cordova plugin add cordova-plugin-background-mode --save
           
-          # এবার সফলভাবে অ্যান্ড্রয়েড প্ল্যাটফর্ম যুক্ত হবে
+          # এবার কোনো আইকন এরর ছাড়াই সফলভাবে প্ল্যাটফর্ম যুক্ত হবে
           cordova platform add android@12.0.0 --save
 
       - name: Build Android APK

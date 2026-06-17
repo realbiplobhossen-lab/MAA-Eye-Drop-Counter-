@@ -358,159 +358,271 @@
                 date: dateStr,
                 timestamp: firebase.firestore.FieldValue.serverTimestamp()
             });
+
+            <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyBH4-TqaQfJ5p8y-n50kYrai7wxSfZZVvY",
+      authDomain: "maa-eye-drop-counter.firebaseapp.com",
+      projectId: "maa-eye-drop-counter",
+      storageBucket: "maa-eye-drop-counter.firebasestorage.app",
+      messagingSenderId: "908819871504",
+      appId: "1:908819871504:web:10bc1cc8f87dd54b381795",
+      measurementId: "G-R3MYYN5TWL"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    let localTimers = {
+        cortis: { targetTime: null, startTime: null, name: 'Cortisol/Precodil' },
+        vigalon: { targetTime: null, startTime: null, name: 'Vigalon' }
+    };
+
+    let vibrationIntervalId = null;
+    let nativeAudioContext = null;
+    let nativeOscillator = null;
+    let nativeGainNode = null;
+    let isAlarmActive = false;
+    let activeAlarmMed = "";
+
+    // কর্ডোভা ব্যাকগ্রাউন্ড এবং নোটিফিকেশন পারমিশন লাইফসাইকেল
+    document.addEventListener("deviceready", () => {
+        if(window.cordova && cordova.plugins.backgroundMode) {
+            cordova.plugins.backgroundMode.enable();
+            cordova.plugins.backgroundMode.overrideBackButton();
+            cordova.plugins.backgroundMode.setDefaults({
+                title: 'MAA Eye Drop Counter Running',
+                text: 'মায়ের চোখের ড্রপ ট্র্যাকার ব্যাকগ্রাউন্ডে সচল আছে।',
+                icon: 'icon',
+                color: '00F0FF',
+                resume: true,
+                hidden: false
+            });
+        }
+        
+        // নোটিফিকেশন পারমিশন চাওয়া (অ্যান্ড্রয়েড ১৩+ এর জন্য অত্যন্ত জরুরি)
+        if (window.cordova && cordova.plugins && cordova.plugins.notification) {
+            cordova.plugins.notification.local.hasPermission(function (granted) {
+                if (!granted) {
+                    cordova.plugins.notification.local.requestPermission();
+                }
+            });
+        }
+    }, false);
+
+    // ফায়ারবেস লাইভ স্টেট লিসেনার
+    db.collection("droptracker").doc("liveState").onSnapshot((doc) => {
+        if (doc.exists) {
+            const data = doc.data();
+            if(data.cortis_target !== undefined) { localTimers.cortis.targetTime = data.cortis_target; localTimers.cortis.startTime = data.cortis_start; }
+            if(data.vigalon_target !== undefined) { localTimers.vigalon.targetTime = data.vigalon_target; localTimers.vigalon.startTime = data.vigalon_start; }
+        }
+    });
+
+    // লাইভ হিস্ট্রি ও নিখুঁত গাণিতিক হিসাব বোর্ড
+    db.collection("history").orderBy("timestamp", "desc").onSnapshot((snapshot) => {
+        const tbody = document.getElementById('stats-body');
+        tbody.innerHTML = '';
+        
+        let totalDrops = 0;
+        let cCount = 0;
+        let vCount = 0;
+        let uniqueDates = new Set();
+        let htmlPayload = "";
+
+        snapshot.forEach((doc) => {
+            const item = doc.data();
+            totalDrops += 1;
+            if(item.name === 'Cortisol/Precodil') cCount++;
+            if(item.name === 'Vigalon') vCount++;
+            if(item.date) uniqueDates.add(item.date);
+            
+            htmlPayload += `<tr>
+                <td>${item.date}</td>
+                <td style="font-weight:600; color:var(--neon-cyan);">${item.name}</td>
+                <td>${item.startTimeStr}</td>
+                <td>${item.actualTime}</td>
+                <td style="color:var(--neon-orange); font-weight:600;">${item.nextTargetTimeStr}</td>
+                <td style="color:var(--neon-green); font-weight:600;">১ ফোঁটা</td>
+            </tr>`;
+        });
+
+        tbody.innerHTML = htmlPayload || `<tr><td colspan="6" style="text-align:center; color:var(--text-dark);">কোনো ড্রপ রেকর্ড নেই</td></tr>`;
+        
+        document.getElementById('math-c-count').innerText = cCount + " বার";
+        document.getElementById('math-v-count').innerText = vCount + " বার";
+        document.getElementById('math-days').innerText = uniqueDates.size + " দিন";
+        document.getElementById('math-drops').innerText = totalDrops + " ফোঁটা";
+    });
+
+    // বাটন ক্লিক অ্যাকশন - টাইম রিসেট এবং নেটিভ নোটিফিকেশন সিডিউলিং লজিক
+    function triggerReset(type, hours) {
+        const nowSec = Math.floor(Date.now() / 1000);
+        const targetSec = nowSec + (hours * 3600);
+        
+        // লোকাল স্ক্রিন রিফ্রেশ ফাস্ট করার জন্য সাথে সাথে সেট করা
+        localTimers[type].targetTime = targetSec;
+        localTimers[type].startTime = nowSec;
+
+        const actualTimeStr = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const dateStr = new Date().toLocaleDateString('bn-BD');
+        const startTimeStr = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const nextTargetTimeStr = new Date(Date.now() + (hours * 3600 * 1000)).toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+        // ১. ক্লাউড ডাটাবেজ সিঙ্ক
+        db.collection("droptracker").doc("liveState").set({
+            [type + '_target']: targetSec,
+            [type + '_start']: nowSec
+        }, { merge: true });
+
+        db.collection("history").add({
+            name: localTimers[type].name,
+            actualTime: actualTimeStr,
+            startTimeStr: startTimeStr,
+            nextTargetTimeStr: nextTargetTimeStr,
+            date: dateStr,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        // ২. এন্ড্রয়েড ওএস লেভেলে নোটিফিকেশন পুশ করা (অ্যাপ ক্লোজ বা স্লিপ মোডে থাকলেও রিংটোন বাজবে)
+        if (window.cordova && cordova.plugins && cordova.plugins.notification) {
+            const notifId = type === 'cortis' ? 101 : 102;
+            cordova.plugins.notification.local.cancel(notifId, function() {
+                cordova.plugins.notification.local.schedule({
+                    id: notifId,
+                    title: 'MAA Eye Drop Counter 🔔',
+                    text: `মাকে এখনই ${localTimers[type].name} ড্রপ দেওয়ার সময় হয়েছে।`,
+                    trigger: { at: new Date(Date.now() + (hours * 3600 * 1000)) },
+                    foreground: true,
+                    lockscreen: true,
+                    priority: 2, // High Priority
+                    wakeup: true, // স্ক্রিন লক থাকলে লাইট অন হবে
+                    sound: 'res://platform_default' // সিস্টেম ডিফল্ট অ্যালার্ম সাউন্ড
+                });
+            });
+        }
+
+        // যদি ওই ড্রপের অ্যালার্ম স্ক্রিন সচল থাকে, তা বন্ধ করা
+        if(activeAlarmMed === localTimers[type].name) {
             stopSystemAlarm();
         }
+    }
 
-                // অ্যালার্ম ট্র্যাক করার জন্য একটি নতুন ভ্যারিয়েবল
-        let isAlarmActive = false;
+    // টাইম কাউন্টডাউন এবং লুপ কন্ট্রোলার
+    setInterval(() => {
+        const now = Math.floor(Date.now() / 1000);
+        const currentHour = new Date().getHours();
+        const isSleepingTime = (currentHour >= 0 && currentHour < 6); // রাত ১২টা - সকাল ৬টা নীরব থাকবে
 
-        // টাইম চেকার লুপ এবং স্লিপ ফিল্টার
-        setInterval(() => {
-            const now = Math.floor(Date.now() / 1000);
-            const currentHour = new Date().getHours();
+        for (let key in localTimers) {
+            const element = document.getElementById('timer-' + key);
+            if (!localTimers[key].targetTime) {
+                element.innerHTML = "--:--:--";
+                continue;
+            }
 
-            // স্লিপিং প্রোটেকশন ফিল্টার: রাত ১২টা থেকে সকাল ৬টা পর্যন্ত অ্যালার্ম সম্পূর্ণ নীরব থাকবে
-            const isSleepingTime = (currentHour >= 0 && currentHour < 6);
+            let timeLeft = localTimers[key].targetTime - now;
 
-            for (let key in localTimers) {
-                const element = document.getElementById('timer-' + key);
-                if (!localTimers[key].targetTime) continue;
-
-                let timeLeft = localTimers[key].targetTime - now;
-
-                if (timeLeft <= 0) {
-                    element.innerHTML = "00:00:00";
-                    // যদি আগে থেকে অ্যালার্ম না বেজে থাকে এবং ঘুমানোর সময় না হয়, তবেই বাজবে
-                    if (!isSleepingTime && !isAlarmActive) {
-                        playLoudAlarmSystem(localTimers[key].name);
-                    }
-                } else {
-                    let hrs = Math.floor(timeLeft / 3600);
-                    let mins = Math.floor((timeLeft % 3600) / 60);
-                    let secs = timeLeft % 60;
-                    element.innerHTML = `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            if (timeLeft <= 0) {
+                element.innerHTML = "00:00:00";
+                if (!isSleepingTime && !isAlarmActive) {
+                    playLoudAlarmSystem(localTimers[key].name);
                 }
+            } else {
+                let hrs = Math.floor(timeLeft / 3600);
+                let mins = Math.floor((timeLeft % 3600) / 60);
+                let secs = timeLeft % 60;
+                element.innerHTML = `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
             }
-        }, 1000);
+        }
+    }, 1000);
 
-        let activeAlarmMed = "";
-        
-        // নেটিভ হার্ডওয়্যার অ্যালার্ম ও ভাইব্রেশন ইঞ্জিন
-        function playLoudAlarmSystem(medName) {
-            if (activeAlarmMed === medName) return;
-            activeAlarmMed = medName;
-            isAlarmActive = true; // অ্যালার্ম স্টেট অ্যাক্টিভ করা হলো
+    // লাউড সাউন্ড ও ভাইব্রেশন ইঞ্জিন ট্রিগার
+    function playLoudAlarmSystem(medName) {
+        if (isAlarmActive && activeAlarmMed === medName) return;
+        activeAlarmMed = medName;
+        isAlarmActive = true;
 
-            // ১. নেটিভ অ্যান্ড্রয়েড নোটিফিকেশন ট্রিগার
-            if (window.cordova && cordova.plugins && cordova.plugins.notification) {
-                cordova.plugins.notification.local.schedule({
-                    title: 'MAA Eye Drop Counter',
-                    text: `মাকে এখনই ${medName} ড্রপ দেওয়ার সময় হয়েছে।`,
-                    foreground: true,
-                    priority: 2,
-                    wakeup: true
-                });
+        // ১. অ্যাপ ওপেন থাকা অবস্থায় ইন-অ্যাপ নোটিফিকেশন
+        if (window.cordova && cordova.plugins && cordova.plugins.notification) {
+            cordova.plugins.notification.local.schedule({
+                title: 'MAA Eye Drop Counter',
+                text: `মাকে এখনই ${medName} ড্রপ দেওয়ার সময় হয়েছে।`,
+                foreground: true,
+                priority: 2,
+                wakeup: true
+            });
+        }
+
+        // ২. অডিও সাইরেন জেনারেটর (Web Audio API)
+        try {
+            if (!nativeAudioContext) {
+                nativeAudioContext = new (window.AudioContext || window.webkitAudioContext)();
             }
+            nativeOscillator = nativeAudioContext.createOscillator();
+            nativeGainNode = nativeAudioContext.createGain();
+            
+            nativeOscillator.type = 'sawtooth';
+            nativeOscillator.frequency.setValueAtTime(880, nativeAudioContext.currentTime);
+            nativeGainNode.gain.setValueAtTime(1.0, nativeAudioContext.currentTime);
+            
+            nativeOscillator.connect(nativeGainNode);
+            nativeGainNode.connect(nativeAudioContext.destination);
+            nativeOscillator.start();
+        } catch(e) {
+            const backupAudio = document.getElementById('backupAudio');
+            if(backupAudio) { backupAudio.volume = 1.0; backupAudio.play().catch(()=>{}); }
+        }
 
-            // ২. হার্ডওয়্যার স্পিকার বাইপাস অডিও অ্যালার্ম (Web Audio API)
-            try {
-                if (!nativeAudioContext) {
-                    nativeAudioContext = new (window.AudioContext || window.webkitAudioContext)();
-                }
-                nativeOscillator = nativeAudioContext.createOscillator();
-                nativeGainNode = nativeAudioContext.createGain();
-                
-                nativeOscillator.type = 'sawtooth'; 
-                nativeOscillator.frequency.setValueAtTime(880, nativeAudioContext.currentTime); 
-                
-                nativeGainNode.gain.setValueAtTime(1.0, nativeAudioContext.currentTime); 
-                
-                nativeOscillator.connect(nativeGainNode);
-                nativeGainNode.connect(nativeAudioContext.destination);
-                nativeOscillator.start();
-            } catch(e) {
-                const backupAudio = document.getElementById('backupAudio');
-                backupAudio.volume = 1.0;
-                backupAudio.play().catch(()=>{});
-            }
-
-            // ৩. কন্ট্রোলড ভাইব্রেশন লুপ
-            if (navigator.vibrate) {
+        // ৩. ইন্টারমিটেন্ট ভাইব্রেশন (১ সেকেন্ড অন, ১ সেকেন্ড অফ)
+        if (navigator.vibrate) {
+            navigator.vibrate([1000, 1000]);
+            vibrationIntervalId = setInterval(() => {
                 navigator.vibrate([1000, 1000]);
-                vibrationIntervalId = setInterval(() => {
-                    navigator.vibrate([1000, 1000]);
-                }, 2000);
-            }
-
-            document.getElementById('alarmMedTitle').innerText = medName;
-            document.getElementById('alarmOverlay').classList.add('active');
+            }, 2000);
         }
 
-        // অ্যালার্ম এবং ভাইব্রেশন ক্লিয়ার লজিক (সংশোধিত)
-        function stopSystemAlarm() {
-            // ১. অডিও স্টপ
-            if (nativeOscillator) {
-                try {
-                    nativeOscillator.stop();
-                    nativeOscillator.disconnect();
-                } catch(e){}
-                nativeOscillator = null;
-            }
-            const backupAudio = document.getElementById('backupAudio');
-            backupAudio.pause(); 
-            backupAudio.currentTime = 0;
+        document.getElementById('alarmMedTitle').innerText = medName;
+        document.getElementById('alarmOverlay').classList.add('active');
+    }
 
-            // ২. ভাইব্রেশন কিল
-            if(vibrationIntervalId) {
-                clearInterval(vibrationIntervalId);
-                vibrationIntervalId = null;
-            }
-            if (navigator.vibrate) {
-                navigator.vibrate(0);
-            }
-
-            // ৩. টাইমার ইন্টারভ্যাল রিসেট বা মিউট করা যাতে পরের সেকেন্ডে আবার লুপ চালু না হয়
-            for (let key in localTimers) {
-                if (localTimers[key].name === activeAlarmMed) {
-                    // টার্গেট টাইম নাল (null) করে দেওয়া হলো যাতে "দেওয়া হয়েছে" বাটনে চাপার আগে আর অ্যালার্ম না ট্রিগার করে
-                    localTimers[key].targetTime = null; 
-                    
-                    // ফায়ারবেস লাইভ স্টেট ক্লিয়ার করা যাতে পরবর্তী অ্যাপ ওপেনে আর ঝামেলা না করে
-                    db.collection("droptracker").doc("liveState").set({
-                        [key + '_target']: null
-                    }, { merge: true });
-                }
-            }
-
-            document.getElementById('alarmOverlay').classList.remove('active');
-            activeAlarmMed = "";
-            isAlarmActive = false; // অ্যালার্ম স্টেট বন্ধ করা হলো
+    // অ্যালার্ম স্টপ লজিক - বাটন ক্লিকের জন্য ফিক্সড
+    function stopSystemAlarm() {
+        // ১. অডিও ইঞ্জিন কিল
+        if (nativeOscillator) {
+            try {
+                nativeOscillator.stop();
+                nativeOscillator.disconnect();
+            } catch(e){}
+            nativeOscillator = null;
         }
-        
-        
-            // ১. অডিও স্টপ
-            if (nativeOscillator) {
-                try {
-                    nativeOscillator.stop();
-                    nativeOscillator.disconnect();
-                } catch(e){}
-                nativeOscillator = null;
-            }
-            const backupAudio = document.getElementById('backupAudio');
-            backupAudio.pause(); backupAudio.currentTime = 0;
+        const backupAudio = document.getElementById('backupAudio');
+        if(backupAudio) { backupAudio.pause(); backupAudio.currentTime = 0; }
 
-            // ২. ভাইব্রেশন কিল
-            if(vibrationIntervalId) {
-                clearInterval(vibrationIntervalId);
-                vibrationIntervalId = null;
-            }
-            if (navigator.vibrate) {
-                navigator.vibrate(0);
-            }
-
-            document.getElementById('alarmOverlay').classList.remove('active');
-            activeAlarmMed = "";
+        // ২. ভাইব্রেশন কিল
+        if(vibrationIntervalId) {
+            clearInterval(vibrationIntervalId);
+            vibrationIntervalId = null;
         }
-    </script>
+        if (navigator.vibrate) {
+            navigator.vibrate(0);
+        }
+
+        // ৩. টাইমার রিসেট করে ফায়ারবেস স্টেট ক্লিয়ার করা যাতে বারবার লুপ অন না হয়
+        for (let key in localTimers) {
+            if (localTimers[key].name === activeAlarmMed) {
+                localTimers[key].targetTime = null;
+                db.collection("droptracker").doc("liveState").set({
+                    [key + '_target']: null
+                }, { merge: true });
+            }
+        }
+
+        document.getElementById('alarmOverlay').classList.remove('active');
+        activeAlarmMed = "";
+        isAlarmActive = false;
+    }
+</script>
+    
 </body>
 </html>

@@ -24,11 +24,17 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
-      # গ্র্যাডল সংস্করণ নির্দিষ্ট করা (XmlParser এরর ফিক্স করার জন্য)
+      # গ্র্যাডল সংস্করণ ৮.৭ লক করা
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
+
+      # নিখোঁজ Android Build Tools 33.0.2 স্বয়ংক্রিয়ভাবে ইনস্টল করার কমান্ড
+      - name: Install Android Build Tools 33.0.2
+        run: |
+          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "build-tools;33.0.2" "platforms;android-33"
 
       - name: Install Cordova Globally
         run: |
@@ -45,7 +51,7 @@ jobs:
           rm -rf www/*
           cp -r ../index.html www/
           
-          # আইকন ম্যানেজমেন্ট
+          # কাস্টম আইকন চেকিং
           if [ -f ../mom_icon.png ]; then
             cp ../mom_icon.png www/
             cp ../config.xml ./
@@ -55,7 +61,7 @@ jobs:
             sed '/<icon/d' ../config.xml > ./config.xml
           fi
 
-          # প্লাগইন ও প্ল্যাটফর্ম
+          # প্লাগইন সংযোজন
           cordova plugin add cordova-plugin-vibration --save
           cordova plugin add cordova-plugin-local-notification --save
           cordova plugin add cordova-plugin-background-mode --save
@@ -65,7 +71,6 @@ jobs:
       - name: Build Android APK
         run: |
           cd android-app
-          # নির্দিষ্ট করা গ্র্যাডল সংস্করণ ব্যবহার করে বিল্ড জোরদার করা
           CORDOVA_ANDROID_GRADLE_DISTRIBUTION_URL="https://services.gradle.org/distributions/gradle-8.7-bin.zip" cordova build android --debug
           
       - name: Upload APK Artifact
